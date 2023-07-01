@@ -32,3 +32,12 @@ Ensure you have a .env file with these variables;
 OPENAI_API_KEY=<key>
 DOC_LOCATION=<path to the text murlis>
 ```
+
+# Running the app
+
+This is the command which runs the app
+
+```
+streamlit run .\murli_chat.py
+```
+
