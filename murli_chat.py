@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 import logging
 import os
 
+
 load_dotenv()
 
 logging.basicConfig(level='INFO')
@@ -24,7 +25,7 @@ class Config():
     chunk_size = 4000
     chunk_overlap = 100
     chunk_separator = "\n\n"
-    chroma_persist_directory = 'chroma_store'
+    chroma_persist_directory = os.environ['CHROMA_STORE']
     embeddings = OpenAIEmbeddings(chunk_size=25)
     model = 'gpt-3.5-turbo-16k'
     # model = 'gpt-4'
@@ -149,7 +150,7 @@ def init_streamlit(docsearch: Chroma):
     Use streamlit like this:
     streamlit run ./murli_chat.py
     """
-    title = "Ask questions about Onepoint"
+    title = "Ask questions about the Murlis"
     st.set_page_config(page_title=title)
     st.header(title)
     # st.write(f"Context with {len(texts)} entries")
