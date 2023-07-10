@@ -6,6 +6,6 @@ After=multi-user.target
 User=ubuntu
 Type=simple
 Restart=always
-ExecStart=/home/ubuntu/miniconda3/envs/langchain_streamlit/bin/python /home/ubuntu/projects/murli_chat/murli_chat.py
+ExecStart=/bin/bash /home/ubuntu/projects/murli_chat/run_app.sh
 [Install]
 WantedBy=multi-user.target

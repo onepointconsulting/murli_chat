@@ -30,7 +30,8 @@ class Config():
     model = 'gpt-3.5-turbo-16k'
     # model = 'gpt-4'
     llm = ChatOpenAI(model=model, temperature=0)
-    history_file = Path('chat_history.txt')
+    chat_hist_location = os.environ['CHAT_HISTORY_LOCATION']
+    history_file = Path(f'{chat_hist_location}/chat_history.txt')
     # To overcome rate limiting erros, please use https://towardsdatascience.com/4-ways-of-question-answering-in-langchain-188c6707cc5a
     search_results = 5
 
