@@ -42,7 +42,7 @@ DOC_LOCATION=<path to the text murlis>
 
 # Running the app
 
-This is the command which runs the app
+This is the command which runs the app on port 8080
 
 ```
 streamlit run .\murli_chat.py --server.port 8080

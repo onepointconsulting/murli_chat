@@ -4,12 +4,11 @@ from langchain.document_loaders import TextLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from pathlib import Path
-from langchain.vectorstores import Chroma
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
+from langchain.vectorstores import FAISS
 
-import shutil
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -22,10 +21,12 @@ load_dotenv()
 logging.basicConfig(level='INFO')
 
 class Config():
-    chunk_size = 4000
+    chunk_size = 6000
     chunk_overlap = 100
     chunk_separator = "\n\n"
-    chroma_persist_directory = os.environ['CHROMA_STORE']
+    faiss_persist_directory = Path(os.environ['FAISS_STORE'])
+    if not faiss_persist_directory.exists():
+        faiss_persist_directory.mkdir()
     embeddings = OpenAIEmbeddings(chunk_size=25)
     model = 'gpt-3.5-turbo-16k'
     # model = 'gpt-4'
@@ -47,8 +48,10 @@ def load_txt(file_path: Path) -> List[Document]:
     """
     loader = TextLoader(file_path=str(file_path), encoding="utf-8")
     doc_list: List[Document] = loader.load()
-    logger.info(f"First item: {doc_list[0].page_content}")
+    # logger.info(f"First item: {doc_list[0].page_content}")
     logger.info(f"Length of CSV list: {len(doc_list)}")
+    for doc in doc_list:
+        doc.page_content = doc.page_content.replace(cfg.chunk_separator, "\n")
     return split_docs(doc_list)
 
 
@@ -57,24 +60,31 @@ def split_docs(doc_list: List[Document]) -> List[Document]:
     Splits the documents in smaller chunks from a list of documents.
     :param doc_list: A list of documents.
     """
-    text_splitter = CharacterTextSplitter(chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap, separator=cfg.chunk_separator)
-    texts = text_splitter.split_documents(doc_list)
+    text_splitter = CharacterTextSplitter(
+        chunk_size=cfg.chunk_size,
+        chunk_overlap=cfg.chunk_overlap,
+        separator=cfg.chunk_separator
+    )
+    texts: List[Document] = text_splitter.split_documents(doc_list)
+    logger.info(f"Length of texts: {len(texts)}")
     return texts
 
 
-def extract_embeddings(texts: List[Document], doc_path: Path) -> Chroma:
+def extract_embeddings(texts: List[Document], doc_path: Path) -> FAISS:
     """
-    Either saves the Chroma embeddings locally or reads them from disk, in case they exist.
-    :return a Chroma wrapper around the embeddings.
+    Either saves the vector database embeddings locally or reads them from disk, in case they exist.
+    :return a vector database wrapper around the embeddings.
     """
-    embedding_dir = f"{cfg.chroma_persist_directory}/{doc_path.stem}"
-    if Path(embedding_dir).exists():
-        return Chroma(persist_directory=embedding_dir, embedding_function=cfg.embeddings)
+    embedding_dir = f"{cfg.faiss_persist_directory}/{doc_path.stem}"
+    embedding_dir_path = Path(embedding_dir)
+    if embedding_dir_path.exists() and len(list(embedding_dir_path.glob("*"))) > 0:
+        return FAISS.load_local(embedding_dir, cfg.embeddings)
     # if Path(embedding_dir).exists():
     #     shutil.rmtree(embedding_dir, ignore_errors=True)
     try:
-        docsearch = Chroma.from_documents(texts, cfg.embeddings, persist_directory=embedding_dir)
-        docsearch.persist()
+        docsearch = FAISS.from_documents(texts, cfg.embeddings)
+        docsearch.save_local(embedding_dir)
+        logger.info("Vector database persisted")
     except Exception as e:
         logger.error(f"Failed to process {doc_path}: {str(e)}")
         if 'docsearch' in vars() or 'docsearch' in globals():
@@ -87,7 +97,11 @@ def enhance_question(orig_question: str) -> str:
     return f"According to the context: {orig_question}"
 
 
-def process_question(similar_docs: List[Document], user_question: str) -> str:
+def process_question(
+        similar_docs: List[Document],
+        user_question: str,
+        chain_type: str='map_reduce'
+    ) -> str:
     """
     Sends the question to the LLM.
     :param similar_docs: A list of documents with the documents retrieved from the vector database.
@@ -95,7 +109,7 @@ def process_question(similar_docs: List[Document], user_question: str) -> str:
     :return: The result computed by the LLM.
     """
     # See https://towardsdatascience.com/4-ways-of-question-answering-in-langchain-188c6707cc5a
-    chain = load_qa_chain(cfg.llm, chain_type='map_reduce')
+    chain = load_qa_chain(cfg.llm, chain_type=chain_type)
     similar_texts = [d.page_content for d in similar_docs]
     with get_openai_callback() as callback:
         response = chain.run(input_documents=similar_docs, question=enhance_question(user_question))
@@ -119,11 +133,13 @@ def read_history()-> List[str]:
     Reads and caches some historical questions. Which you can use to ask questions in the UI.
     :return: a list of questions.
     """
+    history_list = ['']
     with open(cfg.history_file, "r") as f:
-        return list(set([l for l in f.readlines() if len(l.strip()) > 0]))
+        history_list.extend(list(set([l for l in f.readlines() if len(l.strip()) > 0])))
+    return history_list
     
 
-def process_user_question(docsearch: Chroma, user_question: str):
+def process_user_question(docsearch: FAISS, user_question: str, chain_type: str, context_size: int):
     """
     Receives a user question and searches for similar text documents in the vector database.
     Using the similar texts and the user question retrieves the response from the LLM.
@@ -131,8 +147,9 @@ def process_user_question(docsearch: Chroma, user_question: str):
     :param user_question: The question the user has typed.
     """
     if user_question:
-        similar_docs: List[Document] = docsearch.similarity_search(user_question, k = cfg.search_results)
-        response, similar_texts = process_question(similar_docs, user_question)
+        similar_docs: List[Document] = docsearch.similarity_search(user_question, k = context_size)
+        response, similar_texts = process_question(
+            similar_docs, user_question, chain_type)
         st.markdown(response)
         if len(similar_texts) > 0:
             write_history(user_question)
@@ -142,7 +159,34 @@ def process_user_question(docsearch: Chroma, user_question: str):
             st.warning("This answer is unrelated to our context.")
     
 
-def init_streamlit(docsearch: Chroma):
+def create_chain_type(chain_key: str) -> str:
+    """
+    Determines the chain type (strategies to process documents) to use:
+    map_reduce: It separates texts into batches (as an example, you can define batch size in llm=OpenAI(batch_size=5)), feeds each batch with the question to LLM separately, and comes up with the final answer based on the answers from each batch.
+    refine : It separates texts into batches, feeds the first batch to LLM, and feeds the answer and the second batch to LLM. It refines the answer by going through all the batches.
+    map-rerank: It separates texts into batches, feeds each batch to LLM, returns a score of how fully it answers the question, and comes up with the final answer based on the high-scored answers from each batch.
+    chain_type="stuff" uses ALL of the text from the documents in the prompt. It actually doesn’t work with our example because it exceeds the token limit and causes rate-limiting errors
+    """
+    default_chain = 'map_reduce'
+    chain_type: str = st.selectbox(
+     'Which chain type would you like to use?',
+     (default_chain, 'refine', 'map_rerank', 'stuff'), key=chain_key)
+    if chain_type is None:
+        return default_chain
+    return chain_type
+
+
+def create_context_size_select(key: str) -> int:
+    default_context_size = 5
+    context_size: str = st.selectbox(
+     'Which is the context size?',
+     (str(default_context_size), '6', '7', '8', '9', '10'), key=key)
+    if context_size is None:
+        return default_context_size
+    return int(context_size)
+
+
+def init_streamlit(docsearch: FAISS):
     """
     Creates the Streamlit user interface.
     This code expects some form of user question and as soon as it is there it processes
@@ -157,14 +201,29 @@ def init_streamlit(docsearch: Chroma):
     # st.write(f"Context with {len(texts)} entries")
     simple_chat_tab, historical_tab = st.tabs(["Simple Chat", "Historical Questions"])
     with simple_chat_tab:
+        chain_type = create_chain_type('question_chain_type')
+        context_size = create_context_size_select('question_context_size')
         user_question = st.text_input("Your question")
         with st.spinner('Please wait ...'):
-            process_user_question(docsearch=docsearch, user_question=user_question)
+            process_user_question(
+                docsearch=docsearch, 
+                user_question=user_question, 
+                chain_type=chain_type,
+                context_size=context_size
+            )
     with historical_tab:
+        chain_type = create_chain_type('historical_chain_type')
         user_question_2 = st.selectbox("Ask a previous question", read_history())
-        with st.spinner('Please wait ...'):
-            logger.info(f"question: {user_question_2}")
-            process_user_question(docsearch=docsearch, user_question=user_question_2)
+        if len(user_question_2) > 0:
+            context_size = create_context_size_select('history_context_size')
+            with st.spinner('Please wait ...'):
+                logger.info(f"question: {user_question_2}")
+                process_user_question(
+                    docsearch=docsearch,
+                    user_question=user_question_2,
+                    chain_type=chain_type,
+                    context_size=context_size
+                )
 
 
 def load_texts(doc_location: str) -> Tuple[List[str], Path]:
@@ -175,15 +234,17 @@ def load_texts(doc_location: str) -> Tuple[List[str], Path]:
     """
     doc_path = Path(doc_location)
     texts = []
+    failed_count = 0
     for i, p in enumerate(doc_path.glob("*.txt")):
         try:
-            logger.info(f"Processed {i}")
+            logger.info(f"Processed {p}")
             texts.extend(load_txt(p))
         except Exception as e:
             logger.error(f"Cannot process {p} due to {e}")
+            failed_count += 1
     logger.info(f"Length of texts: {len(texts)}")
+    logger.warn(f"Failed: {failed_count}")
     return texts, doc_path
-
 
 def main(doc_location: str ='onepoint_chat'):
     """
@@ -194,15 +255,16 @@ def main(doc_location: str ='onepoint_chat'):
     """
     logger.info(f"Using doc location {doc_location}.")
     doc_path = Path(doc_location)
-    embedding_dir = f"{cfg.chroma_persist_directory}/{doc_path.stem}"
-    if Path(embedding_dir).exists():
+    embedding_dir = f"{cfg.faiss_persist_directory}/{doc_path.stem}"
+    embedding_dir_path = Path(embedding_dir)
+    if embedding_dir_path.exists() and len(list(embedding_dir_path.glob("*"))) > 0:
         logger.info(f"reading from existing directory")
-        docsearch = Chroma(persist_directory=embedding_dir, embedding_function=cfg.embeddings)
+        docsearch = FAISS.load_local(embedding_dir, cfg.embeddings)
     else:
-        logger.warn(f"Cannot find path {embedding_dir}")
+        logger.warning(f"Cannot find path {embedding_dir} or path is empty.")
         logger.info("Generating vectors")
-        # texts, doc_path = load_texts(doc_location=doc_location)
-        # docsearch = extract_embeddings(texts=texts, doc_path=Path(doc_path))
+        texts, doc_path = load_texts(doc_location=doc_location)
+        docsearch = extract_embeddings(texts=texts[:6400 * 2], doc_path=Path(doc_path))
     init_streamlit(docsearch=docsearch)
 
 
