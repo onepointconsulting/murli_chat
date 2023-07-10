@@ -4,9 +4,16 @@ Provides a simple Murli chat app.
 
 # Installation
 
-Please create a Conda environment with Python 10 and then install the following libraries with these commands:
+On Linux systems you might need to install g++ before installing ChromaDB.
 
 ```
+sudo apt install g++
+```
+
+Please create a Conda environment (e.g. langchain_streamlit) with Python 10 and then install the following libraries with these commands:
+
+```
+const activate langchain_streamlit
 pip install langchain
 pip install python-dotenv
 pip install streamlit
