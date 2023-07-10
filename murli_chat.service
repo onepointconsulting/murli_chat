@@ -1,0 +1,11 @@
+[Unit]
+Description=Murli Chat Service
+After=multi-user.target
+
+[Service]
+User=ubuntu
+Type=simple
+Restart=always
+ExecStart=/home/ubuntu/miniconda3/envs/langchain_streamlit/bin/python /home/ubuntu/projects/murli_chat/murli_chat.py
+[Install]
+WantedBy=multi-user.target
