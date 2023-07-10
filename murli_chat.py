@@ -198,7 +198,8 @@ def main(doc_location: str ='onepoint_chat'):
         logger.info(f"reading from existing directory")
         docsearch = Chroma(persist_directory=embedding_dir, embedding_function=cfg.embeddings)
     else:
-        logger.info(f"Generating vectors")
+        logger.warn(f"Cannot find path {embedding_dir}")
+        logger.info("Generating vectors")
         # texts, doc_path = load_texts(doc_location=doc_location)
         # docsearch = extract_embeddings(texts=texts, doc_path=Path(doc_path))
     init_streamlit(docsearch=docsearch)

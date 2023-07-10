@@ -13,7 +13,7 @@ sudo apt install g++
 Please create a Conda environment (e.g. langchain_streamlit) with Python 10 and then install the following libraries with these commands:
 
 ```
-const activate langchain_streamlit
+conda activate langchain_streamlit
 pip install langchain
 pip install python-dotenv
 pip install streamlit
@@ -45,6 +45,6 @@ DOC_LOCATION=<path to the text murlis>
 This is the command which runs the app
 
 ```
-streamlit run .\murli_chat.py
+streamlit run .\murli_chat.py --server.port 8080
 ```
 
