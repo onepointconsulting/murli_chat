@@ -1,11 +1,7 @@
 from typing import List, Tuple
 from langchain.docstore.document import Document
-from langchain.document_loaders import TextLoader
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
 from pathlib import Path
 from langchain.chains.question_answering import load_qa_chain
-from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
 from langchain.vectorstores import FAISS
 
@@ -15,60 +11,14 @@ from dotenv import load_dotenv
 import logging
 import os
 
+from doc_loader import load_txt
+from config import cfg
 
 load_dotenv()
 
 logging.basicConfig(level='INFO')
 
-class Config():
-    chunk_size = 6000
-    chunk_overlap = 100
-    chunk_separator = "\n\n"
-    faiss_persist_directory = Path(os.environ['FAISS_STORE'])
-    if not faiss_persist_directory.exists():
-        faiss_persist_directory.mkdir()
-    embeddings = OpenAIEmbeddings(chunk_size=25)
-    model = 'gpt-3.5-turbo-16k'
-    # model = 'gpt-4'
-    llm = ChatOpenAI(model=model, temperature=0)
-    chat_hist_location = os.environ['CHAT_HISTORY_LOCATION']
-    history_file = Path(f'{chat_hist_location}/chat_history.txt')
-    # To overcome rate limiting erros, please use https://towardsdatascience.com/4-ways-of-question-answering-in-langchain-188c6707cc5a
-    search_results = 5
-
-cfg = Config()
-
 logger = logging.getLogger("murli-chat")
-
-def load_txt(file_path: Path) -> List[Document]:
-    """
-    Use the csv loader to load the CSV content as a list of documents.
-    :param file_path: A CSV file path
-    :return: the document list after extracting and splitting all CSV records.
-    """
-    loader = TextLoader(file_path=str(file_path), encoding="utf-8")
-    doc_list: List[Document] = loader.load()
-    # logger.info(f"First item: {doc_list[0].page_content}")
-    logger.info(f"Length of CSV list: {len(doc_list)}")
-    for doc in doc_list:
-        doc.page_content = doc.page_content.replace(cfg.chunk_separator, "\n")
-    return split_docs(doc_list)
-
-
-def split_docs(doc_list: List[Document]) -> List[Document]:
-    """
-    Splits the documents in smaller chunks from a list of documents.
-    :param doc_list: A list of documents.
-    """
-    text_splitter = CharacterTextSplitter(
-        chunk_size=cfg.chunk_size,
-        chunk_overlap=cfg.chunk_overlap,
-        separator=cfg.chunk_separator
-    )
-    texts: List[Document] = text_splitter.split_documents(doc_list)
-    logger.info(f"Length of texts: {len(texts)}")
-    return texts
-
 
 def extract_embeddings(texts: List[Document], doc_path: Path) -> FAISS:
     """
@@ -243,7 +193,7 @@ def load_texts(doc_location: str) -> Tuple[List[str], Path]:
             logger.error(f"Cannot process {p} due to {e}")
             failed_count += 1
     logger.info(f"Length of texts: {len(texts)}")
-    logger.warn(f"Failed: {failed_count}")
+    logger.warning(f"Failed: {failed_count}")
     return texts, doc_path
 
 def main(doc_location: str ='onepoint_chat'):
