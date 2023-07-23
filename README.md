@@ -21,6 +21,7 @@ pip install openai
 pip install chromadb
 pip install tiktoken
 pip install chainlit
+
 ```
 
 We have used the following library versions:
@@ -52,6 +53,7 @@ streamlit run .\murli_chat.py --server.port 8080
 
 ### chainlit
 ```
-chainlit run .\murli_chat_chainlit.py -w --port 8081
+chainlit run ./murli_chat_chainlit.py -w --port 8081
+chainlit run ./murli_chat_chainlit.py --port 8081
 ```
 

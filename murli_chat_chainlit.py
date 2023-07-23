@@ -9,7 +9,6 @@ from question_service import extract_sources, search_and_combine
 load_dotenv()
 
 SESSION_DOCSEARCH = "SESSION_DOCSEARCH"
-SOURCE_LIMIT = 512
 
 
 @cl.on_chat_start
@@ -33,6 +32,9 @@ async def main(message: str):
         context_size=4,
     )
 
+    # Source message
+    await display_sources(similar_texts, similar_metadata)
+
     # Create the streaming effect.
     msg = cl.Message(content="")
     chunk_size = 3
@@ -42,17 +44,19 @@ async def main(message: str):
         await msg.stream_token(token)
     await msg.send()
 
-    # Source message
+
+async def display_sources(similar_texts, similar_metadata):
     sources = extract_sources(similar_metadata)
-    text_elements = []
+    found_sources = []
     elements = []
     logger.info(f"similar_texts: {len(similar_texts)} similar sources: {len(sources)}")
     for text, source in zip(similar_texts, sources):
-        elements.append(
-            cl.Text(name=source, content=text[:SOURCE_LIMIT], display="inline")
-        )
+        found_sources.append(source)
+        elements.append(cl.Text(name=source, content=text, display="side"))
 
-    await cl.Message(content="Sources:", elements=elements).send()
+    await cl.Message(
+        content=f"\nSources: {', '.join(found_sources)}", elements=elements
+    ).send()
 
 
 if __name__ == "__main__":
