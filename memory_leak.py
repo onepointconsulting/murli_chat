@@ -2,17 +2,16 @@ import tracemalloc, json
 import streamlit as st
 import gc
 
+
 @st.experimental_singleton
 def init_tracking_object():
-  tracemalloc.start(10)
+    tracemalloc.start(10)
 
-  return {
-    "runs": 0,
-    "tracebacks": {}
-  }
+    return {"runs": 0, "tracebacks": {}}
 
 
 _TRACES = init_tracking_object()
+
 
 def traceback_exclude_filter(patterns, tracebackList):
     """
@@ -84,10 +83,13 @@ def compare_snapshots():
     snapshot = tracemalloc.take_snapshot()
     if "snapshot" in _TRACES:
         diff = snapshot.compare_to(_TRACES["snapshot"], "lineno")
-        diff = [d for d in diff if
-                d.count_diff > 0 and traceback_exclude_filter(["tornado"], d.traceback)
-                and traceback_include_filter(["streamlit"], d.traceback)
-                ]
+        diff = [
+            d
+            for d in diff
+            if d.count_diff > 0
+            and traceback_exclude_filter(["tornado"], d.traceback)
+            and traceback_include_filter(["streamlit"], d.traceback)
+        ]
         check_for_leaks(diff)
 
     _TRACES["snapshot"] = snapshot
