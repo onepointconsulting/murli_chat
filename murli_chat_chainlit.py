@@ -10,13 +10,32 @@ load_dotenv()
 
 SESSION_DOCSEARCH = "SESSION_DOCSEARCH"
 
+def process_index_file():
+    from chainlit import server
+    from pathlib import Path
+
+    build_path = Path(server.build_dir)
+    logger.info("build_path: %s", build_path)
+    if build_path.exists():
+        for p in build_path.glob("*.html"):
+            if p.name == "index.html":
+                with open(p) as f:
+                    index_contexts = f.read()
+                    index_contexts = index_contexts.replace("\"/assets/", "\"assets/")
+                    logger.info(index_contexts)
+                with open(p, 'w') as f:
+                    f.write(index_contexts)
+
+
 
 @cl.on_chat_start
 async def main():
     logger.info("Chat started")
+    
     docsearch = init_vector_search()
     cl.user_session.set(SESSION_DOCSEARCH, docsearch)
     await cl.Message(content="Murli chat is up and running!").send()
+    process_index_file()
 
 
 @cl.on_message
