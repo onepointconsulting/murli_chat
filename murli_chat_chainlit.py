@@ -25,17 +25,18 @@ def process_index_file():
                     logger.info(index_contexts)
                 with open(p, 'w') as f:
                     f.write(index_contexts)
+                    logger.info(f"Updated index: \n\n{index_contexts}")
 
 
 
 @cl.on_chat_start
 async def main():
+    process_index_file()
     logger.info("Chat started")
     
     docsearch = init_vector_search()
     cl.user_session.set(SESSION_DOCSEARCH, docsearch)
     await cl.Message(content="Murli chat is up and running!").send()
-    process_index_file()
 
 
 @cl.on_message
